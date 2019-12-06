@@ -1,0 +1,175 @@
+﻿<!DOCTYPE html>
+<meta charset="utf-8">
+<canvas width="960" height="500"></canvas>
+<script id="vertex-shader" type="x-shader/x-vertex">
+precision mediump float;
+attribute vec2 a_position;
+uniform float size;
+void main(void) {
+  gl_Position = vec4(a_position, 0.0, 1.0);
+  gl_PointSize = size;
+}
+</script>
+<script id="fragment-shader" type="x-shader/x-fragment">
+precision mediump float;
+uniform vec4 u_Color;
+void main(void) {
+  gl_FragColor = u_Color;
+}
+</script>
+<script>
+    
+// Select the canvas from the document.
+var canvas = document.querySelector("canvas");
+// Create the WebGL gl, with fallback for experimental support.
+var gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    
+// Compile the vertex shader.
+var vertexShader = gl.createShader(gl.VERTEX_SHADER);
+gl.shaderSource(vertexShader, document.querySelector("#vertex-shader").textContent);
+gl.compileShader(vertexShader);
+    
+// Compile the fragment shader.
+var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+gl.shaderSource(fragmentShader, document.querySelector("#fragment-shader").textContent);
+gl.compileShader(fragmentShader);
+    
+var size = 15;
+    
+// Link and use the program.
+var program = gl.createProgram();
+gl.attachShader(program, vertexShader);
+gl.attachShader(program, fragmentShader);
+    
+gl.bindAttribLocation(program, 7, "a_position");
+
+gl.linkProgram(program);
+gl.useProgram(program);
+
+
+    
+
+    
+function drawObject(data){
+    // Define the positions (as vec2, in normalized coordinates) of the square that covers the canvas.
+    var positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data.vertices, gl.STATIC_DRAW);
+    
+    // Bind the position buffer to the position attribute.
+    var positionAttribute = gl.getAttribLocation(program, "a_position");
+    gl.enableVertexAttribArray(positionAttribute);
+    console.log(positionAttribute);
+    gl.vertexAttribPointer(positionAttribute, 2, gl.FLOAT, false, 0, 0);
+    
+    var u_colorLocation = gl.getUniformLocation(program, "u_Color");
+    gl.uniform4f(u_colorLocation, data.color[0], data.color[1], data.color[2], data.color[3]);
+    
+    var u_sizeLocation = gl.getUniformLocation(program, "size");
+    gl.uniform1f(u_sizeLocation, 5.0);
+    
+    
+    // Draw the square!
+    gl.drawArrays(data.mode, 0, data.vertices.length/2);
+    
+    
+
+    const numUnif = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+    for(var i = 0; i < numUnif; i++){
+        console.log(gl.getActiveUniform(program, i));
+    }
+    
+    const numAttribs = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
+    for (var i = 0; i < numAttribs; i++) {
+        console.log(gl.getActiveAttrib(program, i)); 
+    }
+    console.log("\n");
+}
+    
+var data1 = new Object();
+data1.vertices = new Float32Array([
+        -0.5, -0.3,
+        +1.0, -1.0,
+        +1.0, +1.0,
+        -1.0, +1.0
+      ]);
+data1.color = new Float32Array([1,0,0,1]);
+data1.mode = gl.TRIANGLE_FAN;
+    
+var data2 = new Object();
+data2.vertices = new Float32Array([
+        -1.0, -1.0,
+        +0.2, -0.2,
+        +0.2, +0.2,
+        -0.2, +0.2,
+    
+      ]);
+data2.color = new Float32Array([0,1,0,1]);
+data2.mode = gl.LINES;
+    
+var data3 = new Object();
+data3.vertices = new Float32Array([
+        -0.4, -0.1,
+        +0.3, -0.5,
+    -0.3, -0.1,
+        +0.3, -0.5,
+        -0.45, -0.1,
+        +0.47, -0.5,
+        -0.3, -0.5,
+        +0.3, -0.8,
+      ]);
+data3.color = new Float32Array([0,0,1,1]);
+data3.mode = gl.POINTS;
+    
+var data4 = new Object();
+data4.vertices = new Float32Array([
+-0.25, 0,
+-0.3, 0.15,
+-0.34, 0.1,
+-0.4, -0.1,
+    
+      ]);
+data4.color = new Float32Array([0,0.5,1,1]);
+data4.mode = gl.LINE_STRIP;
+    
+var data5 = new Object();
+data5.vertices = new Float32Array([
+-0.4, 0,
+-0.45, 0.15,
+-0.54, 0.1,
+-0.6, -0.1,
+    
+      ]);
+data5.color = new Float32Array([0.2,0.5,1,1]);
+data5.mode = gl.LINE_LOOP;
+    
+var data6 = new Object();
+data6.vertices = new Float32Array([
+-0.5, 0.3,
+-0.55, 0.45,
+-0.64, 0.3,
+-0.7, -0.3,
+-0.62, -0.36,
+      ]);
+data6.color = new Float32Array([0.2,0.5,1,1]);
+data6.mode = gl.TRIANGLE_STRIP;
+    
+var data7 = new Object();
+data7.vertices = new Float32Array([
++0.5, 0.3,
++0.55, 0.45,
++0.64, 0.3,
+      ]);
+data7.color = new Float32Array([0.2,0.5,0.4,1]);
+data7.mode = gl.TRIANGLES;
+
+    
+drawObject(data1);
+drawObject(data2);
+drawObject(data3);
+drawObject(data4);
+drawObject(data5);
+drawObject(data6);
+drawObject(data7);
+
+</script>

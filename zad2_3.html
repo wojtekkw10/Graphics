@@ -1,0 +1,317 @@
+﻿<!DOCTYPE html>
+<meta charset="utf-8">
+<canvas width="800" height="600" style="display: block"></canvas>
+
+<script src="gl-matrix-min.js"></script>
+
+<!-- VERTEX SHADER -------------------------------->
+<script id="vertex-shader" type="x-shader/x-vertex">
+attribute vec3 vertexPos;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+void main(void){
+gl_Position = projectionMatrix * modelViewMatrix * vec4(vertexPos, 1.0);
+}
+</script>
+<script id="fragment-shader" type="x-shader/x-fragment">
+precision mediump float;
+uniform vec4 u_Color;
+void main(void) {
+  gl_FragColor = u_Color;
+}
+</script>
+
+<script>
+var canvas = document.querySelector("canvas");
+var gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+
+// Compile the vertex shader.
+var vertexShader = gl.createShader(gl.VERTEX_SHADER);
+gl.shaderSource(vertexShader, document.querySelector("#vertex-shader").textContent);
+gl.compileShader(vertexShader);
+    
+// Compile the fragment shader.
+var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+gl.shaderSource(fragmentShader, document.querySelector("#fragment-shader").textContent);
+gl.compileShader(fragmentShader);
+    
+// Link and use the program.
+var program = gl.createProgram();
+gl.attachShader(program, vertexShader);
+gl.attachShader(program, fragmentShader);
+    
+gl.bindAttribLocation(program, 7, "a_position");
+
+gl.linkProgram(program);
+gl.useProgram(program);
+    
+gl.enable(gl.DEPTH_TEST);  
+gl.depthFunc(gl.LEQUAL);
+
+var projMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
+var modMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
+var positionAttribute = gl.getAttribLocation(program, "vertexPos");
+var u_colorLocation = gl.getUniformLocation(program, "u_Color");
+    
+var positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+
+function drawObject(data){
+
+    // The projection matrix (for a 45 degree field of view)
+    const projectionMatrix = glMatrix.mat4.create();
+    const fieldOfView = 45 * Math.PI / 180;   // in radians
+    const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+    const zNear = 0.1;
+    const zFar = 1000.0;
+    glMatrix.mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
+    
+    
+    // Define the positions (as vec2, in normalized coordinates) of the square that covers the canvas.
+
+    gl.bufferData(gl.ARRAY_BUFFER, data.vertices, gl.STATIC_DRAW);
+    
+    // Bind the position buffer to the position attribute.
+    
+    gl.enableVertexAttribArray(positionAttribute);
+    gl.vertexAttribPointer(positionAttribute, 3, gl.FLOAT, false, 0, 0);
+    
+
+    gl.uniform4f(u_colorLocation, data.color[0], data.color[1], data.color[2], data.color[3]);
+    
+
+    //Position of the mesh
+    const modelViewMatrix = glMatrix.mat4.create();
+
+    
+
+    glMatrix.mat4.translate(modelViewMatrix, modelViewMatrix, [data.pos.x, data.pos.y, data.pos.z]);
+    glMatrix.mat4.scale(modelViewMatrix, modelViewMatrix, [data.scale.x, data.scale.y, data.scale.z]);
+        
+     gl.uniformMatrix4fv(projMatrixLoc, false, projectionMatrix);
+     gl.uniformMatrix4fv(modMatrixLoc, false, modelViewMatrix);
+    
+    
+    // Draw the square!
+    gl.drawArrays(data.mode, 0, data.vertices.length/3);
+}
+    
+    var bounding_box_min_x = -2.8;
+    var bounding_box_max_x = 2.7;
+    var bounding_box_min_y = -2.1;
+    var bounding_box_max_y = 2;
+    
+    var last_time = window.performance.now();
+    
+
+function drawRect(pos, size, color, z =-5){
+    var data = new Object();
+    data.pos = new Object();
+    data.scale = new Object();
+    data.rot = new Object();
+    data.vertices = new Float32Array([0,0,0,
+                     size[0], 0, 0,
+                     size[0], size[1], 0,
+                     0, size[1], 0]);
+    data.mode = gl.TRIANGLE_FAN;
+    data.color = new Float32Array(color);
+    data.pos.x = pos[0];
+    data.pos.y = pos[1];
+    data.pos.z = z;
+    data.scale.x = 1;
+    data.scale.y = 1;
+    data.scale.z = 1;
+    data.rot.x = 0;
+    data.rot.y = 0;
+    data.rot.z = 0;
+    drawObject(data);
+}
+
+class drawingObject{
+    constructor(pos, size, new_color, velocity){
+        this.x1 = pos[0];
+        this.y1 = pos[1];
+        this.x2 = pos[0]+size[0];
+        this.y2 = pos[1]+size[1];
+        this.size_x = size[0];
+        this.size_y = size[1];
+        this.color = new_color;
+        this.vel_x = velocity[0];
+        this.vel_y = velocity[1];
+    }
+    setx1(newX){
+        this.x1 = newX;
+        this.x2 = newX + this.size_x;
+    }
+    sety1(newY){
+        this.y1 = newY;
+        this.y2 = newY + this.size_y;
+    }
+
+}
+    
+function generateBackground(){
+    back = [];
+    for( var i = 0; i<10; i++){
+        for(var j=0; j<10; j++){
+            if(j%2==1) back.push(new drawingObject([-2.8+i/2+0.2,1.7-j*.3], [0.45,.2], [1,1,1,1], [0,0]));
+            else back.push(new drawingObject([-2.8+i/2+0.5,1.7-j*.3], [0.45,.2], [1,1,1,1], [0,0]));
+        }
+    }
+    return back;
+}
+    
+function drawDrawingObject(p, color, z=-5){
+    drawRect([p.x1, p.y1], [p.size_x, p.size_y], color, z);
+}
+    
+var paddle = new drawingObject([0, -2.1], [1.5, .2], [1,1,1,1], [0,0]);
+var ball = new drawingObject([-.5,-1], [.08, .08], [1,1,1,1], [0.002,-0.002]);
+    
+function createBlocks(){
+    blocks = [];
+    for( var i = 0; i<10; i++){
+        blocks.push(new drawingObject([-2.7+i/2+0.2,1.7], [0.45,.2], [1,1,1,1], [0,0]));
+    }
+    for( var i = 0; i<9; i++){
+        blocks.push(new drawingObject([-2.7+i/2+0.4,1.4], [0.45,.2], [1,1,1,1], [0,0]));
+    }
+    for( var i = 0; i<8; i++){
+        blocks.push(new drawingObject([-2.7+i/2+0.6,1.1], [0.45,.2], [1,1,1,1], [0,0]));
+    }
+    return blocks;
+}
+    
+var blocks =  createBlocks();
+var background =  generateBackground();
+    
+function redraw(){
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);     
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        drawDrawingObject(paddle, [1,1,1,1]);
+        drawDrawingObject(ball, [1,1,1,1]);
+        for( var i =0; i<blocks.length; i++){ drawDrawingObject(blocks[i], [1,1,1,1]) };
+        for( var i =0; i<background.length; i++) drawDrawingObject(background[i], [.1,.1,.1,1], -6);
+}
+    
+function calc_ball_bounding_box(ball){
+    if(ball.x1 < bounding_box_min_x) {
+        ball.x1 = bounding_box_min_x;
+        ball.vel_x *= -1;
+    }
+    if(ball.x1 > bounding_box_max_x){
+        ball.x1 = bounding_box_max_x;
+        ball.vel_x *= -1;
+    }
+    if(ball.y1 < bounding_box_min_y) {
+        ball.y1 = bounding_box_min_y;
+        ball.vel_y *= -1;
+    }
+    if(ball.y1 > bounding_box_max_y) {
+        ball.y1 = bounding_box_max_y;
+        ball.vel_y *= -1;
+    }
+}
+    
+function detectCollision(obj1, obj2){
+    x1_min = obj1.x1;
+    y1_min = obj1.y1;
+    x1_max = obj1.x2;
+    y1_max = obj1.y2;
+    x2_min = obj2.x1;
+    y2_min = obj2.y1;
+    x2_max = obj2.x2;
+    y2_max = obj2.y2;
+    var collision = false;
+    
+    if(((y1_min<y2_max && y1_max > y2_max) && (x1_min > x2_min && x1_max < x2_max))){
+        obj1.sety1(y2_max);
+        obj1.vel_y *= -1;
+        collision = true;
+    }
+    if(((x1_min<x2_max && x1_max > x2_max) && (y1_min > y2_min && y1_max < y2_max))){
+        obj1.setx1(x2_max);
+        obj1.vel_x *= -1;
+        collision = true;
+    }
+    if(((y1_max > y2_min && y1_min < y2_min) && (x1_min > x2_min && x1_max < x2_max))){
+        obj1.sety1(y2_min-obj1.size_y);
+        obj1.vel_y *= -1;
+        collision = true;
+    }
+    if(((x1_max>x2_min && x1_min < x2_min) && (y1_min > y2_min && y1_max < y2_max))){
+        obj1.setx1(x2_min-obj1.size_x);
+        obj1.vel_x *= -1;
+        collision = true;
+    }
+    return collision;
+}
+
+function physics(time){
+    ball.setx1(ball.x1+ball.vel_x*time);
+    ball.sety1(ball.y1+ball.vel_y*time);
+    calc_ball_bounding_box(ball);
+    
+    for( var i=0; i<blocks.length; i++){
+        if(detectCollision(ball, blocks[i])){
+            blocks.splice(i,1);
+        }
+    }
+    
+    detectCollision(ball, paddle);
+}
+    
+function animate() {
+    var time_now = window.performance.now();
+    var timeDelta = time_now - last_time;
+    last_time = time_now;
+
+    if(timeDelta * 0.001 > 1/60){
+        var loops = (timeDelta*0.001)/(1/60);
+        while(loops<1){
+            physics(1/60);
+            loops -= 1;
+        }
+        physics(loops);
+        
+    }
+
+    physics(timeDelta);
+    
+    for( var i=0; i<blocks.length; i++){
+        if(detectCollision(ball, blocks[i])){
+            blocks.splice(i,1);
+        }
+    }
+    
+    detectCollision(ball, paddle);
+
+
+    redraw();
+    gl.finish();
+    window.requestAnimationFrame(animate);
+}
+    
+    document.addEventListener("keydown", (event) => {
+        const keyName = event.key;
+        if(keyName == "a"){
+            paddle.setx1(paddle.x1-0.05);
+        }
+        else if(keyName == "d"){
+            paddle.setx1(paddle.x1+0.05);
+        }
+        
+    })
+    
+   animate();
+    
+
+    
+
+
+</script>
+    
+
+    
+  

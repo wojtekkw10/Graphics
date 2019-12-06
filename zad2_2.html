@@ -1,0 +1,247 @@
+﻿<!DOCTYPE html>
+<meta charset="utf-8">
+<canvas width="960" height="500" style="display: block"></canvas>
+X: <input type="range" name="points" min=-5000 max=5000 id="pos1x" value="0">
+Y: <input type="range" name="points" min=-5000 max=5000 id="pos1y" value="0">
+Z: <input type="range" name="points" min=-5000 max=5000 id="pos1z" value="0"><br>
+RotX<input type="range" name="points" min=-3000 max=3000 id="rot1x">
+RotY<input type="range" name="points" min=-3000 max=3000 id="rot1y">
+RotZ<input type="range" name="points" min=-3000 max=3000 id="rot1z"><br>
+ScaX<input type="range" name="points" min=1 max=300 id="sca1x" value="100">
+ScaY<input type="range" name="points" min=1 max=300 id="sca1y" value="100">
+ScaZ<input type="range" name="points" min=1 max=300 id="sca1z" value="100"><br>
+R<input type="range" name="points" min=0 max=1000 id="colr" value="500">
+G<input type="range" name="points" min=0 max=1000 id="colg" value="500">
+Z<input type="range" name="points" min=0 max=1000 id="colb" value="500"><br>
+
+<script src="gl-matrix-min.js"></script>
+
+<!-- VERTEX SHADER -------------------------------->
+<script id="vertex-shader" type="x-shader/x-vertex">
+attribute vec3 vertexPos;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+void main(void){
+gl_Position = projectionMatrix * modelViewMatrix * vec4(vertexPos, 1.0);
+}
+</script>
+<script id="fragment-shader" type="x-shader/x-fragment">
+precision mediump float;
+uniform vec4 u_Color;
+void main(void) {
+  gl_FragColor = u_Color;
+}
+</script>
+
+<script>
+var canvas = document.querySelector("canvas");
+var gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+pos1x.addEventListener("input", function(){ draw(); }, false);
+pos1y.addEventListener("input", function(){ draw(); }, false);
+pos1z.addEventListener("input", function(){ draw(); }, false);
+rot1x.addEventListener("input", function(){ draw(); }, false);
+rot1y.addEventListener("input", function(){ draw(); }, false);
+rot1z.addEventListener("input", function(){ draw(); }, false);
+sca1x.addEventListener("input", function(){ draw(); }, false);
+sca1y.addEventListener("input", function(){ draw(); }, false);
+sca1z.addEventListener("input", function(){ draw(); }, false);
+colr.addEventListener("input", function(){ draw(); }, false);
+colg.addEventListener("input", function(){ draw(); }, false);
+colb.addEventListener("input", function(){ draw(); }, false);
+    
+function last2bits(x) { return (x & 3); }
+function hindex2xy(hindex, N) {
+    // 1. compute position of node in N=2 curve
+    var positions = [
+    /* 0: */ [0, 0],
+    /* 1: */ [0, 1],
+    /* 2: */ [1, 1],
+    /* 3: */ [1, 0]
+    ];
+
+    var tmp = positions[last2bits(hindex)];
+    hindex = (hindex >>> 2);
+
+    // 2. iteratively compute coords
+    var x = tmp[0];
+    var y = tmp[1];
+
+    for (var n = 4; n <= N; n *= 2) {
+        var n2 = n / 2;
+
+        switch (last2bits(hindex)) {
+        case 0: /* case A: left-bottom */
+            tmp = x; x = y; y = tmp;
+            break;
+
+        case 1: /* case B: left-upper */
+            x = x;
+            y = y + n2;
+            break;
+
+        case 2: /* case C: right-upper */
+            x = x + n2;
+            y = y + n2;
+            break;
+
+        case 3: /* case D: right-bottom */
+            tmp = y;
+            y = (n2-1) - x;
+            x = (n2-1) - tmp;
+            x = x + n2;
+            break;
+        }
+
+        hindex = (hindex >>> 2);
+    }
+    return [x, y, 0];
+}
+function getHilbertArray(n){
+    var N = Math.pow(2, n);
+    var hilbertArray = new Float32Array(new ArrayBuffer(3*4*N*N)); //becasue the input is in bytes
+    //console.log(N);
+    for(var i = 0; i<N*N; i++){
+        var current = hindex2xy(i, N);
+        //console.log(current);
+        //console.log(i);
+        hilbertArray.set(current, i*3);
+    }
+    return hilbertArray;
+}
+
+
+
+// Compile the vertex shader.
+var vertexShader = gl.createShader(gl.VERTEX_SHADER);
+gl.shaderSource(vertexShader, document.querySelector("#vertex-shader").textContent);
+gl.compileShader(vertexShader);
+    
+// Compile the fragment shader.
+var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+gl.shaderSource(fragmentShader, document.querySelector("#fragment-shader").textContent);
+gl.compileShader(fragmentShader);
+    
+// Link and use the program.
+var program = gl.createProgram();
+gl.attachShader(program, vertexShader);
+gl.attachShader(program, fragmentShader);
+    
+gl.bindAttribLocation(program, 7, "a_position");
+
+gl.linkProgram(program);
+gl.useProgram(program);
+    
+gl.enable(gl.DEPTH_TEST);  
+gl.depthFunc(gl.LEQUAL);
+
+
+
+function drawObject(data){
+    // The projection matrix (for a 45 degree field of view)
+    const projectionMatrix = glMatrix.mat4.create();
+    const fieldOfView = 45 * Math.PI / 180;   // in radians
+    const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+    const zNear = 0.1;
+    const zFar = 1000.0;
+    glMatrix.mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
+    
+    
+    // Define the positions (as vec2, in normalized coordinates) of the square that covers the canvas.
+    var positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data.vertices, gl.STATIC_DRAW);
+    
+    // Bind the position buffer to the position attribute.
+    var positionAttribute = gl.getAttribLocation(program, "vertexPos");
+    gl.enableVertexAttribArray(positionAttribute);
+    console.log(positionAttribute);
+    gl.vertexAttribPointer(positionAttribute, 3, gl.FLOAT, false, 0, 0);
+    
+    var u_colorLocation = gl.getUniformLocation(program, "u_Color");
+    gl.uniform4f(u_colorLocation, data.color[0], data.color[1], data.color[2], data.color[3]);
+    
+
+    //Position of the mesh
+  const modelViewMatrix = glMatrix.mat4.create();
+
+    
+
+    glMatrix.mat4.translate(modelViewMatrix, modelViewMatrix, [data.pos.x, data.pos.y, data.pos.z]);
+    glMatrix.mat4.rotateX(modelViewMatrix, modelViewMatrix, data.rot.x);
+    glMatrix.mat4.rotateY(modelViewMatrix, modelViewMatrix, data.rot.y);
+    glMatrix.mat4.rotateZ(modelViewMatrix, modelViewMatrix, data.rot.z);
+    glMatrix.mat4.scale(modelViewMatrix, modelViewMatrix, [data.scale.x, data.scale.y, data.scale.z]);
+        
+     gl.uniformMatrix4fv(gl.getUniformLocation(program, "projectionMatrix"), false,
+        projectionMatrix);
+     gl.uniformMatrix4fv(gl.getUniformLocation(program, "modelViewMatrix"), false,
+        modelViewMatrix);
+    
+    
+    // Draw the square!
+    gl.drawArrays(data.mode, 0, data.vertices.length/3);
+    
+    
+
+    const numUnif = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+    for(var i = 0; i < numUnif; i++){
+        console.log(gl.getActiveUniform(program, i));
+    }
+    
+    const numAttribs = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
+    for (var i = 0; i < numAttribs; i++) {
+        console.log(gl.getActiveAttrib(program, i)); 
+    }
+    console.log("\n");
+}
+    
+    function drawHilbertCurve(n, pos, color, scale, rot){
+        var data = new Object();
+        data.pos = new Object();
+        data.scale = new Object();
+        data.rot = new Object();
+        data.vertices = getHilbertArray(n);
+        data.mode = gl.LINE_STRIP;
+        data.color = new Float32Array(color);
+        data.pos.x = pos[0];
+        data.pos.y = pos[1];
+        data.pos.z = pos[2];
+        data.scale.x = scale[0];
+        data.scale.y = scale[1];
+        data.scale.z = scale[2];
+        data.rot.x = rot[0];
+        data.rot.y = rot[1];
+        data.rot.z = rot[2];
+    drawObject(data);
+}
+    var x = -0.4;
+    function draw(){
+    drawHilbertCurve(1,[x,-.5,-3], [1,0,0,1], [1,1,1], [0,0+document.getElementById("rot1y").value/1000,0]);
+    drawHilbertCurve(2,[x,-.5,-4], [0,0,1,1], [0.5,.5,.5], [0,0+document.getElementById("rot1y").value/1000,0]);
+    drawHilbertCurve(3,[x,-.5,-5], [0,1,0,1], [0.25,.25,.25], [0,0+document.getElementById("rot1y").value/1000,0]);
+    drawHilbertCurve(4,[x,-.5,-6], [1,0,1,1], [0.125,.125,.125], [0,0+document.getElementById("rot1y").value/1000,0]);
+        
+        
+    drawHilbertCurve(5,[x+document.getElementById("pos1x").value/1000,
+                        -.5+document.getElementById("pos1y").value/1000,
+                       -7+document.getElementById("pos1z").value/1000],
+                     [document.getElementById("colr").value/1000,
+                        document.getElementById("colg").value/1000,
+                       document.getElementById("colb").value/1000, 1], 
+                     [document.getElementById("sca1x").value/1000,
+                      document.getElementById("sca1y").value/1000,
+                     document.getElementById("sca1z").value/1000],
+                     [document.getElementById("rot1x").value/1000,
+                      document.getElementById("rot1y").value/1000,
+                     document.getElementById("rot1z").value/1000]);
+    
+        drawObject(data7);
+    }
+    
+    draw();
+    
+
+    
+
+
+</script>
